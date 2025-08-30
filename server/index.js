@@ -9,7 +9,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
-// Store room data including leaderboards, timers, and start times
+
 const roomData = new Map();
 const roomTimers = new Map();
 
@@ -27,7 +27,7 @@ io.on("connection", (socket) => {
     socket.join(roomCode);
     console.log(`Socket ${socket.id} joined room ${roomCode}`);
     
-    // Send current room status to the joining user
+
     if (roomData.has(roomCode)) {
       const room = roomData.get(roomCode);
       socket.emit('roomStatus', {
@@ -46,13 +46,13 @@ io.on("connection", (socket) => {
     const room = roomData.get(roomCode);
     if (!room || Date.now() < room.startTime) return;
 
-    // Mark room as started
+
     room.isStarted = true;
     roomData.set(roomCode, room);
 
-    // Start the quiz timer - use a longer duration for the actual quiz
+
     const startTime = Date.now();
-    const quizDuration = 5 * 60 * 1000; // 5 minutes for the quiz
+    const quizDuration = 5 * 60 * 1000; 
     
     const intervalId = setInterval(() => {
       const elapsed = Date.now() - startTime;
@@ -73,13 +73,13 @@ app.post("/create-quiz", async (req, res) => {
     const { title, description, startTime } = req.body;
     console.log("Quiz created:", { title, description, startTime });
     
-    // Generate a unique room code
+
     const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     
-    // Parse start time and convert to timestamp
+
     const startTimestamp = new Date(startTime).getTime();
     
-    // Initialize room data
+
     const room = {
         title,
         description,
@@ -97,7 +97,7 @@ app.post("/create-quiz", async (req, res) => {
     });
 });
 
-// Submit score endpoint with per-question scoring
+
 app.post("/submit-score", async (req, res) => {
     const { questionIndex, selectedAnswer, correctAnswer, timeTaken, roomCode, playerId } = req.body;
     
@@ -111,25 +111,25 @@ app.post("/submit-score", async (req, res) => {
     const room = roomData.get(roomCode);
     const leaderboard = room.leaderboard;
     
-    // Check if answer is correct
+
     const isCorrect = selectedAnswer === correctAnswer;
     
-    // Calculate score for this question with time decay
+
     let questionPoints = 0;
     if (isCorrect) {
-        const basePoints = 100; // Base 100 points per correct answer
-        const maxTime = 5 * 60 * 1000; // 5 minutes max (same as quiz duration)
-        const timeDecay = Math.max(0, 1 - (timeTaken / maxTime)); // Decay factor based on time
-        questionPoints = Math.round(basePoints * (0.6 + 0.4 * timeDecay)); // Min 60%, max 100%
+        const basePoints = 100; 
+        const maxTime = 5 * 60 * 1000; 
+        const timeDecay = Math.max(0, 1 - (timeTaken / maxTime)); 
+        questionPoints = Math.round(basePoints * (0.6 + 0.4 * timeDecay));
     }
     
     console.log('Question score calculation:', { isCorrect, basePoints: isCorrect ? 100 : 0, timeDecay: isCorrect ? Math.max(0, 1 - (timeTaken / (5 * 60 * 1000))) : 0, questionPoints });
     
-    // Find existing player entry or create new one
+
     let playerEntry = null;
     const tempQueue = new StablePriorityQueue((a, b) => b.points - a.points);
     
-    // Copy all entries to temp queue and find player
+
     while (!leaderboard.isEmpty()) {
         const entry = leaderboard.poll();
         if (entry.player.id === playerId) {
@@ -139,18 +139,15 @@ app.post("/submit-score", async (req, res) => {
         }
     }
     
-    // Update or create player entry
     if (playerEntry) {
-        // Update existing player
         playerEntry.points += questionPoints;
         playerEntry.player.correctCount = (playerEntry.player.correctCount || 0) + (isCorrect ? 1 : 0);
         playerEntry.player.totalQuestions = (playerEntry.player.totalQuestions || 0) + 1;
         playerEntry.player.lastUpdate = Date.now();
         
-        // Add back to queue
         tempQueue.add(playerEntry);
     } else {
-        // Create new player entry
+
         const newEntry = {
             points: questionPoints,
             player: {
@@ -164,36 +161,31 @@ app.post("/submit-score", async (req, res) => {
         tempQueue.add(newEntry);
     }
     
-    // Restore all entries to leaderboard
     while (!tempQueue.isEmpty()) {
         leaderboard.add(tempQueue.poll());
     }
-    
-    // Get updated leaderboard
+
     const topScores = [];
     const tempQueue2 = new StablePriorityQueue((a, b) => b.points - a.points);
     
-    // Copy all entries to temp queue
     while (!leaderboard.isEmpty()) {
         const entry = leaderboard.poll();
         tempQueue2.add(entry);
     }
     
-    // Get top 10 scores
     while (!tempQueue2.isEmpty() && topScores.length < 10) {
         const entry = tempQueue2.poll();
         topScores.push(entry);
-        leaderboard.add(entry); // Restore to original queue
+        leaderboard.add(entry);
     }
     
-    // Restore remaining entries
+
     while (!tempQueue2.isEmpty()) {
         leaderboard.add(tempQueue2.poll());
     }
     
     console.log('Updated leaderboard:', topScores);
-    
-    // Emit updated leaderboard to all users in the room
+
     io.to(roomCode).emit("leaderboardUpdate", topScores);
     
     res.json({
@@ -205,7 +197,7 @@ app.post("/submit-score", async (req, res) => {
     });
 });
 
-// Legacy endpoint for final quiz submission (kept for backward compatibility)
+
 app.post("/submit-final-score", async (req, res) => {
     const { correctCount, timeTaken, roomCode, playerId } = req.body;
     
@@ -218,12 +210,10 @@ app.post("/submit-final-score", async (req, res) => {
     
     const room = roomData.get(roomCode);
     const leaderboard = room.leaderboard;
-    
-    // Find existing player entry
+
     let playerEntry = null;
     const tempQueue = new StablePriorityQueue((a, b) => b.points - a.points);
-    
-    // Copy all entries to temp queue and find player
+
     while (!leaderboard.isEmpty()) {
         const entry = leaderboard.poll();
         if (entry.player.id === playerId) {
@@ -233,7 +223,6 @@ app.post("/submit-final-score", async (req, res) => {
         }
     }
     
-    // Update player's final stats
     if (playerEntry) {
         playerEntry.player.finalCorrectCount = correctCount;
         playerEntry.player.finalTimeTaken = timeTaken;
@@ -241,34 +230,29 @@ app.post("/submit-final-score", async (req, res) => {
         tempQueue.add(playerEntry);
     }
     
-    // Restore all entries to leaderboard
     while (!tempQueue.isEmpty()) {
         leaderboard.add(tempQueue.poll());
     }
     
-    // Get updated leaderboard
     const topScores = [];
     const tempQueue2 = new StablePriorityQueue((a, b) => b.points - a.points);
     
-    // Copy all entries to temp queue
+
     while (!leaderboard.isEmpty()) {
         const entry = leaderboard.poll();
         tempQueue2.add(entry);
     }
     
-    // Get top 10 scores
     while (!tempQueue2.isEmpty() && topScores.length < 10) {
         const entry = tempQueue2.poll();
         topScores.push(entry);
-        leaderboard.add(entry); // Restore to original queue
+        leaderboard.add(entry);
     }
     
-    // Restore remaining entries
     while (!tempQueue2.isEmpty()) {
         leaderboard.add(tempQueue2.poll());
     }
     
-    // Emit updated leaderboard to all users in the room
     io.to(roomCode).emit("leaderboardUpdate", topScores);
     
     res.json({
@@ -277,7 +261,6 @@ app.post("/submit-final-score", async (req, res) => {
     });
 });
 
-// Get leaderboard endpoint
 app.get("/leaderboard/:roomCode", (req, res) => {
     const { roomCode } = req.params;
     
@@ -290,20 +273,17 @@ app.get("/leaderboard/:roomCode", (req, res) => {
     const topScores = [];
     const tempQueue = new StablePriorityQueue((a, b) => b.points - a.points);
     
-    // Copy all entries to temp queue
     while (!leaderboard.isEmpty()) {
         const entry = leaderboard.poll();
         tempQueue.add(entry);
     }
     
-    // Get top 10 scores
     while (!tempQueue.isEmpty() && topScores.length < 10) {
         const entry = tempQueue.poll();
         topScores.push(entry);
-        leaderboard.add(entry); // Restore to original queue
+        leaderboard.add(entry);
     }
     
-    // Restore remaining entries
     while (!tempQueue.isEmpty()) {
         leaderboard.add(tempQueue.poll());
     }
@@ -316,7 +296,7 @@ app.get("/leaderboard/:roomCode", (req, res) => {
     });
 });
 
-// Get room status endpoint
+
 app.get("/room-status/:roomCode", (req, res) => {
     const { roomCode } = req.params;
     
